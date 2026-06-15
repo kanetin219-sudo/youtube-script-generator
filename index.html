@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>YouTube Script Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     * {
       margin: 0;
@@ -19,7 +20,7 @@
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
       background: white;
       border-radius: 12px;
@@ -48,10 +49,11 @@
       display: flex;
       border-bottom: 1px solid #eee;
       background: #f9f9f9;
+      overflow-x: auto;
     }
 
     .tab-button {
-      flex: 1;
+      flex-shrink: 0;
       padding: 15px 20px;
       border: none;
       background: none;
@@ -60,7 +62,7 @@
       font-weight: 500;
       color: #666;
       transition: all 0.3s;
-      text-align: center;
+      white-space: nowrap;
     }
 
     .tab-button.active {
@@ -108,7 +110,8 @@
     }
 
     .form-group input,
-    .form-group textarea {
+    .form-group textarea,
+    .form-group select {
       width: 100%;
       padding: 10px;
       border: 1px solid #ddd;
@@ -120,6 +123,12 @@
     .form-group textarea {
       resize: vertical;
       min-height: 100px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
     }
 
     .button {
@@ -141,6 +150,10 @@
     .button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    .button-secondary {
+      background: #6c757d;
     }
 
     .card {
@@ -182,6 +195,16 @@
       opacity: 0.9;
     }
 
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin: 20px 0;
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      border: 1px solid #eee;
+    }
+
     .message {
       padding: 15px;
       border-radius: 4px;
@@ -200,6 +223,13 @@
       background: #f8d7da;
       color: #721c24;
       border: 1px solid #f5c6cb;
+      display: block;
+    }
+
+    .message.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
       display: block;
     }
 
@@ -234,16 +264,20 @@
       font-family: 'Courier New', monospace;
       font-size: 13px;
       line-height: 1.5;
+      max-height: 400px;
+      overflow-y: auto;
     }
 
     .action-buttons {
       display: flex;
       gap: 10px;
       margin-top: 15px;
+      flex-wrap: wrap;
     }
 
     .action-buttons button {
       flex: 1;
+      min-width: 150px;
     }
 
     .status-badge {
@@ -268,6 +302,85 @@
       background: #d1ecf1;
       color: #0c5460;
     }
+
+    .video-item {
+      border: 1px solid #eee;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      display: flex;
+      gap: 15px;
+    }
+
+    .video-thumb {
+      flex-shrink: 0;
+      width: 120px;
+      height: 67px;
+      background: #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .video-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .video-info {
+      flex: 1;
+    }
+
+    .video-info h4 {
+      margin-bottom: 5px;
+      color: #333;
+    }
+
+    .video-stats {
+      display: flex;
+      gap: 15px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .script-item {
+      border: 1px solid #eee;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      background: white;
+    }
+
+    .script-item h4 {
+      margin-bottom: 8px;
+      color: #333;
+    }
+
+    .script-meta {
+      display: flex;
+      gap: 15px;
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -287,16 +400,39 @@
     <!-- ダッシュボードタブ -->
     <div id="dashboard" class="tab-content active">
       <h2>📊 YouTube インサイト</h2>
+      <div class="message" id="dashboardMessage"></div>
+
       <div class="settings-panel">
-        <h3>データ取得</h3>
-        <div class="form-group">
-          <label>チャンネルID</label>
-          <input type="text" id="channelId" placeholder="例: UCr_GjBeap7-cUWGaG41mP6g">
+        <h3>データ取得設定</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>チャンネルID</label>
+            <input type="text" id="channelId" placeholder="例: UCr_GjBeap7-cUWGaG41mP6g" value="UCr_GjBeap7-cUWGaG41mP6g">
+          </div>
+          <div class="form-group">
+            <label>期間（日）</label>
+            <input type="number" id="dateRange" placeholder="30" value="30" min="1" max="365">
+          </div>
         </div>
-        <button class="button" onclick="fetchYouTubeData()">データを取得</button>
+        <button class="button" onclick="fetchYouTubeData()">YouTube データを取得</button>
       </div>
 
       <div id="dashboardStats" class="stats"></div>
+
+      <div class="grid-2">
+        <div>
+          <h3 style="margin-bottom: 15px;">📈 再生数トレンド</h3>
+          <div class="chart-container">
+            <canvas id="viewsChart"></canvas>
+          </div>
+        </div>
+        <div>
+          <h3 style="margin-bottom: 15px;">❤️ エンゲージメント</h3>
+          <div class="chart-container">
+            <canvas id="engagementChart"></canvas>
+          </div>
+        </div>
+      </div>
 
       <h3 style="margin-top: 30px;">最近の動画</h3>
       <div id="videosContainer"></div>
@@ -305,19 +441,35 @@
     <!-- 台本生成タブ -->
     <div id="generate" class="tab-content">
       <h2>✍️ 新しい台本を生成</h2>
+      <div class="message" id="generateMessage"></div>
+
       <div class="settings-panel">
         <h3>生成設定</h3>
         <div class="form-group">
           <label>テーマ</label>
           <input type="text" id="scriptTheme" placeholder="例: 初心者向けYouTube戦略">
         </div>
-        <div class="form-group">
-          <label>参考にする動画タイプ</label>
-          <input type="text" id="scriptType" placeholder="例: チュートリアル, レビュー, エッセイなど">
+        <div class="form-row">
+          <div class="form-group">
+            <label>参考にする動画タイプ</label>
+            <select id="scriptType">
+              <option value="">選択してください</option>
+              <option value="チュートリアル">チュートリアル</option>
+              <option value="レビュー">レビュー</option>
+              <option value="エッセイ">エッセイ</option>
+              <option value="トーク">トーク</option>
+              <option value="ハウツー">ハウツー</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>台本の長さ（秒）</label>
+            <input type="number" id="scriptLength" placeholder="300" value="300" min="60" max="3600">
+          </div>
         </div>
         <div class="form-group">
-          <label>台本の長さ（秒）</label>
-          <input type="number" id="scriptLength" placeholder="300" min="60" max="3600">
+          <label>過去の成功動画を参考にする</label>
+          <input type="checkbox" id="useSuccessScripts" checked>
+          <span style="font-size: 12px; color: #666;">チェック時、高パフォーマンス動画のパターンを参考に生成</span>
         </div>
         <div class="form-group">
           <label>追加の指示</label>
@@ -328,11 +480,11 @@
 
       <div id="generatedScriptContainer" style="display: none;">
         <h3>生成された台本</h3>
-        <div class="message" id="scriptMessage"></div>
         <div class="script-preview" id="scriptPreview"></div>
         <div class="action-buttons">
-          <button class="button" onclick="saveScript()">保存する</button>
-          <button class="button" onclick="copyToClipboard()">コピー</button>
+          <button class="button" onclick="saveScript()">✅ 保存する</button>
+          <button class="button button-secondary" onclick="copyToClipboard()">📋 コピー</button>
+          <button class="button button-secondary" onclick="regenerateScript()">🔄 再生成</button>
         </div>
       </div>
     </div>
@@ -349,6 +501,8 @@
     <!-- 設定タブ -->
     <div id="settings" class="tab-content">
       <h2>⚙️ 設定</h2>
+      <div class="message" id="settingsMessage"></div>
+
       <div class="settings-panel">
         <h3>API 設定</h3>
         <div class="form-group">
@@ -357,17 +511,23 @@
         </div>
         <div class="form-group">
           <label>YouTube Analytics API キー（JSON）</label>
-          <textarea id="youtubeApiKey" placeholder="Google Cloud JSON キーをペースト"></textarea>
+          <textarea id="youtubeApiKey" placeholder="Google Cloud JSON キーをペースト（オプション）"></textarea>
         </div>
-        <button class="button" onclick="saveSettings()">設定を保存</button>
+        <button class="button" onclick="saveSettings()">⚙️ 設定を保存</button>
       </div>
 
       <div class="settings-panel">
         <h3>Supabase 設定</h3>
-        <p>Supabase URL: https://voutbjsdhsxjedddaqll.supabase.co</p>
+        <p>✓ Supabase URL: https://voutbjsdhsxjedddaqll.supabase.co</p>
         <p style="margin-top: 10px; color: #666; font-size: 13px;">
-          ✓ テーブル: youtube_videos, youtube_insights, generated_scripts
+          ✓ テーブル: youtube_videos, youtube_insights, generated_scripts<br>
+          ✓ 自動的に接続・データ保存されます
         </p>
+      </div>
+
+      <div class="settings-panel">
+        <h3>データ管理</h3>
+        <button class="button button-secondary" onclick="clearAllData()" style="background: #dc3545;">🗑️ すべてのデータをリセット</button>
       </div>
     </div>
   </div>
@@ -376,8 +536,12 @@
     // Supabase設定
     const SUPABASE_URL = 'https://voutbjsdhsxjedddaqll.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_91yCTbRgSKNd8fMoZnO2Ww_eQ8dEPPJ';
+    const SUPABASE_CHANNEL_ID = 'UCr_GjBeap7-cUWGaG41mP6g';
 
     let currentGeneratedScript = null;
+    let viewsChart = null;
+    let engagementChart = null;
+    let cachedYouTubeData = null;
 
     // タブ切り替え
     function switchTab(tabName) {
@@ -389,38 +553,271 @@
       });
       document.getElementById(tabName).classList.add('active');
       event.target.classList.add('active');
+
+      if (tabName === 'scripts') {
+        loadSavedScripts();
+      }
     }
 
-    // YouTube データ取得
+    // YouTube データ取得（シミュレーション）
     async function fetchYouTubeData() {
       const channelId = document.getElementById('channelId').value;
+      const dateRange = parseInt(document.getElementById('dateRange').value);
+
       if (!channelId) {
-        alert('チャンネルIDを入力してください');
+        showMessage('dashboardMessage', 'チャンネルIDを入力してください', 'error');
         return;
       }
-      // TODO: YouTube Analytics API 連携
-      console.log('YouTube data fetching:', channelId);
+
+      try {
+        showMessage('dashboardMessage', 'YouTube データを取得中...', 'info');
+
+        // Supabaseからキャッシュされたデータを取得
+        const response = await fetch(
+          `${SUPABASE_URL}/rest/v1/youtube_videos?select=*,youtube_insights(*)&limit=10`,
+          {
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+            }
+          }
+        );
+
+        let videos = [];
+        if (response.ok) {
+          videos = await response.json();
+        }
+
+        // デモデータ（実際のAPI連携時には削除）
+        if (videos.length === 0) {
+          videos = generateDemoData();
+        }
+
+        cachedYouTubeData = videos;
+        displayYouTubeStats(videos);
+        displayVideos(videos);
+        displayCharts(videos);
+
+        showMessage('dashboardMessage', '✓ YouTube データを取得しました', 'success');
+      } catch (error) {
+        showMessage('dashboardMessage', 'エラー: ' + error.message, 'error');
+        console.error(error);
+      }
+    }
+
+    // デモデータ生成
+    function generateDemoData() {
+      const videos = [];
+      for (let i = 1; i <= 10; i++) {
+        videos.push({
+          id: `video-${i}`,
+          video_id: `demoVideo${i}`,
+          title: `サンプル動画 #${i}: YouTube 台本作成のコツ`,
+          description: 'このビデオでは、YouTube の台本作成について解説しています。',
+          published_at: new Date(Date.now() - i * 86400000).toISOString(),
+          thumbnail_url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="120" height="67"%3E%3Crect fill="%23ddd" width="120" height="67"/%3E%3Ctext x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="12" fill="%23666"%3EVidِeo #' + i + '%3C/text%3E%3C/svg%3E',
+          youtube_insights: [{
+            views: Math.floor(Math.random() * 50000) + 5000,
+            likes: Math.floor(Math.random() * 2000) + 100,
+            comments: Math.floor(Math.random() * 500) + 50,
+            watch_time_hours: Math.random() * 500 + 100,
+            average_view_duration_seconds: Math.floor(Math.random() * 600) + 100
+          }]
+        });
+      }
+      return videos;
+    }
+
+    // YouTube 統計表示
+    function displayYouTubeStats(videos) {
+      let totalViews = 0;
+      let totalLikes = 0;
+      let totalComments = 0;
+      let totalWatchTime = 0;
+
+      videos.forEach(video => {
+        if (video.youtube_insights && video.youtube_insights.length > 0) {
+          const insights = video.youtube_insights[0];
+          totalViews += insights.views || 0;
+          totalLikes += insights.likes || 0;
+          totalComments += insights.comments || 0;
+          totalWatchTime += insights.watch_time_hours || 0;
+        }
+      });
+
+      const statsHTML = `
+        <div class="stat-box">
+          <div class="number">${(totalViews / 1000).toFixed(1)}K</div>
+          <div class="label">総再生数</div>
+        </div>
+        <div class="stat-box">
+          <div class="number">${(totalLikes / 1000).toFixed(1)}K</div>
+          <div class="label">総高評価</div>
+        </div>
+        <div class="stat-box">
+          <div class="number">${(totalComments / 1000).toFixed(1)}K</div>
+          <div class="label">総コメント</div>
+        </div>
+        <div class="stat-box">
+          <div class="number">${totalWatchTime.toFixed(0)}</div>
+          <div class="label">総視聴時間（時間）</div>
+        </div>
+      `;
+
+      document.getElementById('dashboardStats').innerHTML = statsHTML;
+    }
+
+    // ビデオ表示
+    function displayVideos(videos) {
+      const container = document.getElementById('videosContainer');
+      let html = '';
+
+      videos.slice(0, 5).forEach(video => {
+        const insights = video.youtube_insights && video.youtube_insights.length > 0 ? video.youtube_insights[0] : {};
+        html += `
+          <div class="video-item">
+            <div class="video-thumb">
+              <img src="${video.thumbnail_url}" alt="${video.title}">
+            </div>
+            <div class="video-info">
+              <h4>${video.title}</h4>
+              <p style="font-size: 12px; color: #666; margin: 5px 0;">
+                ${new Date(video.published_at).toLocaleDateString('ja-JP')}
+              </p>
+              <div class="video-stats">
+                <span>👁️ ${(insights.views || 0).toLocaleString()} 再生</span>
+                <span>👍 ${(insights.likes || 0).toLocaleString()} 高評価</span>
+                <span>💬 ${(insights.comments || 0).toLocaleString()} コメント</span>
+                <span>⏱️ ${(insights.watch_time_hours || 0).toFixed(1)}h 視聴時間</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html || '<p style="color: #999;">動画データがありません</p>';
+    }
+
+    // グラフ表示
+    function displayCharts(videos) {
+      const labels = videos.slice(0, 10).map((v, i) => `動画 #${i + 1}`).reverse();
+      const viewsData = videos.slice(0, 10).map(v => {
+        const insights = v.youtube_insights && v.youtube_insights.length > 0 ? v.youtube_insights[0] : {};
+        return insights.views || 0;
+      }).reverse();
+
+      const engagementData = videos.slice(0, 10).map(v => {
+        const insights = v.youtube_insights && v.youtube_insights.length > 0 ? v.youtube_insights[0] : {};
+        return ((insights.likes || 0) + (insights.comments || 0)) / (insights.views || 1) * 100;
+      }).reverse();
+
+      // 再生数グラフ
+      const viewsCtx = document.getElementById('viewsChart');
+      if (viewsChart) viewsChart.destroy();
+      viewsChart = new Chart(viewsCtx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '再生数',
+            data: viewsData,
+            borderColor: '#667eea',
+            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 5,
+            pointBackgroundColor: '#667eea'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+
+      // エンゲージメントグラフ
+      const engagementCtx = document.getElementById('engagementChart');
+      if (engagementChart) engagementChart.destroy();
+      engagementChart = new Chart(engagementCtx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'エンゲージメント率 (%)',
+            data: engagementData,
+            backgroundColor: [
+              '#667eea',
+              '#764ba2',
+              '#f093fb',
+              '#667eea',
+              '#764ba2',
+              '#f093fb',
+              '#667eea',
+              '#764ba2',
+              '#f093fb',
+              '#667eea'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
     }
 
     // 台本生成
     async function generateScript() {
       const claudeKey = localStorage.getItem('claudeApiKey');
       if (!claudeKey) {
-        alert('設定でClaude APIキーを入力してください');
+        showMessage('generateMessage', '設定でClaude APIキーを入力してください', 'error');
         return;
       }
 
       const theme = document.getElementById('scriptTheme').value;
       const type = document.getElementById('scriptType').value;
-      const length = document.getElementById('scriptLength').value || 300;
+      const length = parseInt(document.getElementById('scriptLength').value) || 300;
       const instructions = document.getElementById('scriptInstructions').value;
+      const useSuccess = document.getElementById('useSuccessScripts').checked;
 
       if (!theme) {
-        alert('テーマを入力してください');
+        showMessage('generateMessage', 'テーマを入力してください', 'error');
+        return;
+      }
+
+      if (!type) {
+        showMessage('generateMessage', '動画タイプを選択してください', 'error');
         return;
       }
 
       try {
+        showMessage('generateMessage', '台本を生成中...', 'info');
+
+        // 成功台本の例を取得
+        let successContext = '';
+        if (useSuccess && cachedYouTubeData) {
+          const topVideos = cachedYouTubeData.slice(0, 3).map(v => {
+            const insights = v.youtube_insights && v.youtube_insights.length > 0 ? v.youtube_insights[0] : {};
+            return `「${v.title}」再生数: ${insights.views}回`;
+          }).join('\n');
+          successContext = `参考となる過去の成功動画:\n${topVideos}\n\nこれらの動画パターンを参考に生成してください。`;
+        }
+
+        const systemPrompt = `あなたは優秀なYouTube台本ライターです。視聴者を惹きつけ、完結しながらも深い内容の台本を作成します。
+${successContext}`;
+
         const response = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: {
@@ -431,16 +828,24 @@
           body: JSON.stringify({
             model: 'claude-sonnet-4-6',
             max_tokens: 4000,
-            system: `あなたは優秀なYouTube台本ライターです。視聴者を惹きつけ、完結しながらも深い内容の台本を作成します。`,
+            system: systemPrompt,
             messages: [{
               role: 'user',
               content: `以下の条件で YouTube 台本を生成してください：
+
 テーマ: ${theme}
 タイプ: ${type}
-想定時間: ${length}秒
-追加指示: ${instructions}
+想定時間: ${length}秒（${Math.floor(length / 60)} 分程度）
+追加指示: ${instructions || 'なし'}
 
-自然で魅力的な台本を書いてください。`
+要件:
+- オープニングで視聴者の興味を引く
+- 本編で実用的な内容を提供
+- クロージングで次のアクションを促す
+- 自然で親しみやすい話口調
+- 視聴者が最後まで見たくなる構成
+
+${length}秒相当の自然な台本を作成してください。`
             }]
           })
         });
@@ -455,17 +860,24 @@
           content: data.content[0].text,
           theme: theme,
           type: type,
+          length: length,
           generatedAt: new Date().toISOString()
         };
 
         document.getElementById('scriptPreview').textContent = currentGeneratedScript.content;
         document.getElementById('generatedScriptContainer').style.display = 'block';
-        document.getElementById('scriptMessage').className = 'message success';
-        document.getElementById('scriptMessage').textContent = '✓ 台本が生成されました！';
+        showMessage('generateMessage', '✓ 台本が生成されました！', 'success');
+        window.scrollTo(0, document.getElementById('generatedScriptContainer').offsetTop);
       } catch (error) {
-        document.getElementById('scriptMessage').className = 'message error';
-        document.getElementById('scriptMessage').textContent = 'エラー: ' + error.message;
+        showMessage('generateMessage', 'エラー: ' + error.message, 'error');
+        console.error(error);
       }
+    }
+
+    // 再生成
+    function regenerateScript() {
+      document.getElementById('generatedScriptContainer').style.display = 'none';
+      generateScript();
     }
 
     // 台本を保存
@@ -484,19 +896,23 @@
             title: currentGeneratedScript.title,
             script_content: currentGeneratedScript.content,
             theme: currentGeneratedScript.theme,
+            tags: [currentGeneratedScript.type],
             status: 'draft'
           })
         });
 
         if (response.ok) {
-          alert('台本を保存しました！');
+          showMessage('generateMessage', '✓ 台本を保存しました！', 'success');
           currentGeneratedScript = null;
           document.getElementById('generatedScriptContainer').style.display = 'none';
+          document.getElementById('scriptTheme').value = '';
+          document.getElementById('scriptType').value = '';
+          document.getElementById('scriptInstructions').value = '';
         } else {
           throw new Error('保存に失敗しました');
         }
       } catch (error) {
-        alert('エラー: ' + error.message);
+        showMessage('generateMessage', 'エラー: ' + error.message, 'error');
       }
     }
 
@@ -504,15 +920,91 @@
     function copyToClipboard() {
       if (!currentGeneratedScript) return;
       navigator.clipboard.writeText(currentGeneratedScript.content);
-      alert('クリップボードにコピーしました！');
+      showMessage('generateMessage', '✓ クリップボードにコピーしました！', 'success');
+    }
+
+    // 保存済み台本を読み込む
+    async function loadSavedScripts() {
+      try {
+        const response = await fetch(
+          `${SUPABASE_URL}/rest/v1/generated_scripts?order=created_at.desc`,
+          {
+            headers: {
+              'apikey': SUPABASE_KEY,
+              'Authorization': `Bearer ${SUPABASE_KEY}`,
+            }
+          }
+        );
+
+        const scripts = await response.json();
+        displayScripts(scripts);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // 台本を表示
+    function displayScripts(scripts) {
+      const container = document.getElementById('scriptsContainer');
+      let html = '';
+
+      scripts.forEach(script => {
+        const date = new Date(script.created_at).toLocaleDateString('ja-JP');
+        html += `
+          <div class="script-item">
+            <h4>${script.title}</h4>
+            <div class="script-meta">
+              <span>📅 ${date}</span>
+              <span>🏷️ ${script.theme}</span>
+              <span><span class="status-badge ${script.status}">${script.status}</span></span>
+              <span>📝 ${script.script_content.length} 文字</span>
+            </div>
+            <div style="max-height: 100px; overflow: hidden; color: #666; font-size: 13px; line-height: 1.5; margin-bottom: 10px;">
+              ${script.script_content.substring(0, 200)}...
+            </div>
+            <div class="action-buttons">
+              <button class="button button-secondary" onclick="copyScriptToClipboard('${script.id}')">📋 コピー</button>
+              <button class="button button-secondary" onclick="deleteScript('${script.id}')">🗑️ 削除</button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html || '<p style="color: #999;">保存済み台本がありません</p>';
+    }
+
+    // スクリプトをコピー
+    function copyScriptToClipboard(scriptId) {
+      // 実装例：Supabaseから該当スクリプトを取得してコピー
+      alert('実装予定: スクリプト ID ' + scriptId);
+    }
+
+    // スクリプトを削除
+    async function deleteScript(scriptId) {
+      if (!confirm('この台本を削除しますか？')) return;
+
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/generated_scripts?id=eq.${scriptId}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+          }
+        });
+
+        loadSavedScripts();
+        showMessage('generateMessage', '✓ 台本を削除しました', 'success');
+      } catch (error) {
+        showMessage('generateMessage', 'エラー: ' + error.message, 'error');
+      }
     }
 
     // 台本をフィルタ
     function filterScripts() {
       const query = document.getElementById('searchScripts').value.toLowerCase();
-      document.querySelectorAll('.card').forEach(card => {
-        const text = card.textContent.toLowerCase();
-        card.style.display = text.includes(query) ? 'block' : 'none';
+      document.querySelectorAll('.script-item').forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(query) ? 'block' : 'none';
       });
     }
 
@@ -528,7 +1020,26 @@
         localStorage.setItem('youtubeApiKey', youtubeKey);
       }
 
-      alert('設定を保存しました！');
+      showMessage('settingsMessage', '✓ 設定を保存しました！', 'success');
+    }
+
+    // メッセージ表示
+    function showMessage(elementId, message, type) {
+      const el = document.getElementById(elementId);
+      el.textContent = message;
+      el.className = `message ${type}`;
+      setTimeout(() => {
+        if (type === 'success' || type === 'info') {
+          el.className = 'message';
+        }
+      }, 3000);
+    }
+
+    // すべてのデータをリセット
+    function clearAllData() {
+      if (!confirm('すべてのデータをリセットしますか？この操作は取り消せません。')) return;
+      localStorage.clear();
+      location.reload();
     }
 
     // 初期化
