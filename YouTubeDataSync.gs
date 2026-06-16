@@ -6,21 +6,98 @@
 const YOUTUBE_CHANNEL_ID = 'UCr_GjBeap7-cUWGaG41mP6g';
 const SUPABASE_URL = 'https://voutbjsdhsxjedddaqll.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvdXRianNkaHN4amVkZGRhcWxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NjQwMDksImV4cCI6MjA5NjU0MDAwOX0.NxjKLpjojfBzl-978SwqepT6v4IJwz0KP82TBerIcdo';
-const SHEET_ID = '1LaUjkcp9ZSYLtTmpWGLNqhAOBpqcBoA8Z5sC_L2-Qzc';
 
-// YouTube Data API v3 で動画リスト取得
+// ============================================================
+// セットアップ関数
+// ============================================================
+
+function setupGASProperties() {
+  const props = PropertiesService.getScriptProperties();
+
+  // YouTube API キー設定
+  props.setProperty('YOUTUBE_API_KEY', 'AIzaSyCAm-fD469y20mfVGMiL29_cFjPU9TmBA');
+
+  Logger.log('✅ GAS プロパティを設定しました');
+  Logger.log('  - YOUTUBE_API_KEY: 設定済み');
+}
+
+function createPerformanceSheet() {
+  const ss = SpreadsheetApp.create('YouTube動画パフォーマンス');
+  const sheet = ss.getActiveSheet();
+
+  // ヘッダー行
+  sheet.appendRow(['動画タイトル', 'テーマ', 'スクリプトパターン', '再生数', 'エンゲージメント率(%)', '高評価', 'コメント', '公開日']);
+
+  // サンプルデータ
+  sheet.appendRow(['YouTube成功戦略11選', 'ハウツー', 'ストーリー型導入', 15000, 8.5, 1200, 340, '2026-06-01']);
+  sheet.appendRow(['初心者向けチャンネル開設ガイド', 'チュートリアル', '段階的解説', 22000, 6.2, 1800, 520, '2026-06-05']);
+  sheet.appendRow(['撮影テクニック完全版', 'レビュー', 'Before/After', 8500, 4.1, 350, 120, '2026-06-10']);
+
+  sheet.setColumnWidth(1, 250);
+  sheet.setColumnWidth(2, 150);
+  sheet.setColumnWidth(3, 150);
+
+  const sheetId = ss.getId();
+  const url = ss.getUrl();
+
+  Logger.log('✅ スプレッドシートを作成しました');
+  Logger.log('  - URL: ' + url);
+  Logger.log('  - ID: ' + sheetId);
+
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('PERFORMANCE_SHEET_ID', sheetId);
+
+  return sheetId;
+}
+
+function setupTriggers() {
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    ScriptApp.deleteTrigger(trigger);
+  });
+
+  ScriptApp.newTrigger('syncYouTubeData')
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .create();
+
+  ScriptApp.newTrigger('analyzeSuccessPatterns')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(10)
+    .create();
+
+  Logger.log('✅ トリガーを設定しました');
+  Logger.log('  - syncYouTubeData: 毎日 09:00');
+  Logger.log('  - analyzeSuccessPatterns: 毎週月曜日 10:00');
+}
+
+function runFullSetup() {
+  Logger.log('=== GAS 全セットアップ開始 ===');
+  setupGASProperties();
+  const sheetId = createPerformanceSheet();
+  setupTriggers();
+  Logger.log('=== セットアップ完了 ===');
+  Logger.log('📊 以下の URL で動画パフォーマンスデータを入力してください:');
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('PERFORMANCE_SHEET_ID');
+  Logger.log('https://docs.google.com/spreadsheets/d/' + id);
+}
+
+// ============================================================
+// YouTube データ同期関数
+// ============================================================
+
 function fetchYouTubeVideos() {
   try {
     Logger.log('📺 YouTube 動画リスト取得開始');
 
-    // YouTube Data API を使用（API キーが必要）
     const youtubeApiKey = PropertiesService.getScriptProperties().getProperty('YOUTUBE_API_KEY');
     if (!youtubeApiKey) {
-      Logger.log('⚠️ YouTube API キーが設定されていません。スクリプトプロパティに YOUTUBE_API_KEY を設定してください。');
+      Logger.log('⚠️ YouTube API キーが設定されていません。setupGASProperties() を実行してください。');
       return [];
     }
 
-    // チャンネルの最新動画を取得
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${YOUTUBE_CHANNEL_ID}&order=date&maxResults=20&type=video&key=${youtubeApiKey}`;
 
     const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
@@ -51,42 +128,6 @@ function fetchYouTubeVideos() {
   }
 }
 
-// YouTube Analytics API で動画の詳細統計を取得
-function fetchYouTubeAnalytics() {
-  try {
-    Logger.log('📊 YouTube Analytics データ取得開始');
-
-    // YouTube Analytics API を使用（サービスアカウント認証）
-    const serviceAccountKey = PropertiesService.getScriptProperties().getProperty('YOUTUBE_ANALYTICS_KEY');
-    if (!serviceAccountKey) {
-      Logger.log('⚠️ YouTube Analytics キーが設定されていません。');
-      return {};
-    }
-
-    // パースしてトークンを取得
-    let keyData;
-    try {
-      keyData = JSON.parse(serviceAccountKey);
-    } catch (e) {
-      Logger.log('⚠️ JSON パースエラー。スクリプトプロパティを確認してください。');
-      return {};
-    }
-
-    // JWT トークン取得（簡略版・実装省略）
-    // 実際の実装では Utilities.computeRsaSha256Signature を使用
-
-    Logger.log('⚠️ YouTube Analytics API は複雑な認証が必要です。');
-    Logger.log('    スプレッドシートで YouTube Analytics のアドオンを使うか、');
-    Logger.log('    データを手動で入力してください。');
-
-    return {};
-  } catch (e) {
-    Logger.log('❌ エラー: ' + e.message);
-    return {};
-  }
-}
-
-// 動画データを Supabase に保存
 function saveVideosToSupabase(videos) {
   try {
     Logger.log('💾 Supabase に動画データを保存中');
@@ -129,7 +170,6 @@ function saveVideosToSupabase(videos) {
   }
 }
 
-// 動画の詳細統計を Supabase に保存（手動入力用）
 function saveInsightsToSupabase(videoId, insights) {
   try {
     const payload = JSON.stringify({
@@ -169,28 +209,29 @@ function saveInsightsToSupabase(videoId, insights) {
   }
 }
 
-// スプレッドシートから成功動画パターンを抽出して保存
 function extractSuccessPatterns() {
   try {
     Logger.log('📈 成功パターン抽出開始');
 
-    const ss = SpreadsheetApp.openById(SHEET_ID);
-    let sheet = ss.getSheetByName('動画パフォーマンス');
-    if (!sheet) {
-      Logger.log('⚠️ 「動画パフォーマンス」シートが見つかりません。');
-      return;
+    const props = PropertiesService.getScriptProperties();
+    const sheetId = props.getProperty('PERFORMANCE_SHEET_ID');
+
+    if (!sheetId) {
+      Logger.log('⚠️ パフォーマンスシートが見つかりません。createPerformanceSheet() を実行してください。');
+      return [];
     }
+
+    const ss = SpreadsheetApp.openById(sheetId);
+    let sheet = ss.getSheetByName('シート1') || ss.getActiveSheet();
 
     const data = sheet.getDataRange().getValues();
     const highPerformingVideos = [];
 
-    // 2行目以降を処理（1行目はヘッダー）
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      const views = row[3] || 0; // 再生数列
-      const engagement = row[4] || 0; // エンゲージメント率列
+      const views = parseInt(row[3]) || 0;
+      const engagement = parseFloat(row[4]) || 0;
 
-      // 再生数が 10,000 以上、またはエンゲージメント率が 5% 以上の動画を成功と判定
       if (views >= 10000 || engagement >= 5) {
         highPerformingVideos.push({
           title: row[0],
@@ -204,7 +245,6 @@ function extractSuccessPatterns() {
 
     Logger.log(`✅ ${highPerformingVideos.length} 個の成功パターンを抽出しました`);
 
-    // 成功パターンをログに出力
     highPerformingVideos.forEach(video => {
       Logger.log(`  📺 ${video.title}: 再生数 ${video.views}, エンゲージメント ${video.engagement}%`);
     });
@@ -216,7 +256,6 @@ function extractSuccessPatterns() {
   }
 }
 
-// 成功パターンから学習データを生成
 function generateLearningData(successPatterns) {
   try {
     Logger.log('🧠 学習データ生成開始');
@@ -225,7 +264,6 @@ function generateLearningData(successPatterns) {
     const patterns = {};
 
     successPatterns.forEach(video => {
-      // テーマごとに統計
       if (!themes[video.theme]) {
         themes[video.theme] = {
           count: 0,
@@ -237,7 +275,6 @@ function generateLearningData(successPatterns) {
       themes[video.theme].avg_views += video.views;
       themes[video.theme].avg_engagement += video.engagement;
 
-      // スクリプトパターンごとに統計
       if (video.script_pattern) {
         if (!patterns[video.script_pattern]) {
           patterns[video.script_pattern] = {
@@ -250,7 +287,6 @@ function generateLearningData(successPatterns) {
       }
     });
 
-    // 平均値計算
     Object.keys(themes).forEach(theme => {
       themes[theme].avg_views /= themes[theme].count;
       themes[theme].avg_engagement /= themes[theme].count;
@@ -271,80 +307,28 @@ function generateLearningData(successPatterns) {
   }
 }
 
-// 定期実行: YouTube データを同期
+// ============================================================
+// 定期実行関数
+// ============================================================
+
 function syncYouTubeData() {
   Logger.log('=== YouTube データ同期開始 ===');
-
-  // YouTube 動画リストを取得
   const videos = fetchYouTubeVideos();
-
-  // Supabase に保存
   if (videos.length > 0) {
     saveVideosToSupabase(videos);
   }
-
   Logger.log('=== YouTube データ同期完了 ===');
 }
 
-// 定期実行: 成功パターン分析
 function analyzeSuccessPatterns() {
   Logger.log('=== 成功パターン分析開始 ===');
-
-  // スプレッドシートから成功パターンを抽出
   const successPatterns = extractSuccessPatterns();
-
-  // 学習データを生成
   if (successPatterns.length > 0) {
     generateLearningData(successPatterns);
   }
-
   Logger.log('=== 成功パターン分析完了 ===');
 }
 
-// API キー設定
-function setupProperties() {
-  const props = PropertiesService.getScriptProperties();
-
-  // YouTube API キー（YouTube Data API v3）
-  props.setProperty('YOUTUBE_API_KEY', 'ここに YouTube Data API キーを貼り付け');
-
-  // YouTube Analytics API キー（Google Cloud JSON）
-  props.setProperty('YOUTUBE_ANALYTICS_KEY', 'ここに Google Cloud サービスアカウントキーを貼り付け');
-
-  Logger.log('✅ スクリプトプロパティを初期化しました');
-  Logger.log('https://script.google.com/home/projects/ で API キーを設定してください');
-}
-
-// 定期実行トリガー設定
-function setupTrigger() {
-  // 既存トリガーを削除
-  ScriptApp.getProjectTriggers().forEach(trigger => {
-    if (trigger.getHandlerFunction() === 'syncYouTubeData' ||
-        trigger.getHandlerFunction() === 'analyzeSuccessPatterns') {
-      ScriptApp.deleteTrigger(trigger);
-    }
-  });
-
-  // 新規トリガーを設定（毎日 09:00）
-  ScriptApp.newTrigger('syncYouTubeData')
-    .timeBased()
-    .everyDays(1)
-    .atHour(9)
-    .create();
-
-  // 成功パターン分析（毎週月曜日 10:00）
-  ScriptApp.newTrigger('analyzeSuccessPatterns')
-    .timeBased()
-    .onWeekDay(ScriptApp.WeekDay.MONDAY)
-    .atHour(10)
-    .create();
-
-  Logger.log('✅ トリガーを設定しました');
-  Logger.log('  - syncYouTubeData: 毎日 09:00');
-  Logger.log('  - analyzeSuccessPatterns: 毎週月曜日 10:00');
-}
-
-// テスト実行
 function testSync() {
   Logger.log('=== テスト実行開始 ===');
   syncYouTubeData();
